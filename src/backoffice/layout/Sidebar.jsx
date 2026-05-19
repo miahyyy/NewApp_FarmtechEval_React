@@ -23,7 +23,7 @@ export default function Sidebar() {
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-logo">NewAPP</div>
+      <div className="sidebar-logo">FarmTech</div>
       <nav>
         <ul>
           {LINKS.map(link => (

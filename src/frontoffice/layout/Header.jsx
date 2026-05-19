@@ -19,7 +19,7 @@ export default function Header() {
         {/* Logo */}
         <Link to="/" className="fo-logo">
           <span className="fo-logo-diamond">◆</span>
-          NewAPP
+          Farmtech
         </Link>
 
         {/* Nav */}

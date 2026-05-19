@@ -45,7 +45,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="login-logo">
           <span className="login-logo-diamond">◆</span>
-          <span className="login-logo-text">NewAPP</span>
+          <span className="login-logo-text">Farmtech NewAPP</span>
         </div>
 
         <div className="login-header">
