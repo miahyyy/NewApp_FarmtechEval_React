@@ -1,0 +1,269 @@
+import { API_URL, WS_KEY } from '../api/config'
+import { escapeXml, parseXml, getFirstId, getText } from './api/xml'
+
+function buildUrl(resource, query = '') {
+  return `${API_URL}/${resource}?ws_key=${WS_KEY}${query}`
+}
+
+async function requestXml(url, options) {
+  const res = await fetch(url, options)
+  const text = await res.text()
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} : ${text}`)
+  }
+  return text
+}
+
+async function fetchFirstResourceId(resource, nodeName, query = '') {
+  const xmlText = await requestXml(buildUrl(resource, query))
+  const xml = parseXml(xmlText)
+  const id = getFirstId(xml, nodeName)
+  if (!id) throw new Error(`Aucun id trouvé pour ${resource}`)
+  return id
+}
+
+async function fetchOrderStateId() {
+  // French comments: Au lieu de prendre le premier status qui vient, on cherche un statut
+  // qui NE génère PAS de facture ni de PDF (invoice=0, pdf_invoice=0).
+  // Ceci évite le crash interne de TCPDF (imagecreatefrompng) sur localhost dû au SSL !
+  const xmlText = await requestXml(buildUrl('order_states', '&display=full'))
+  const xml = parseXml(xmlText)
+  
+  const states = Array.from(xml.querySelectorAll('order_state'))
+  const safeState = states.find(s => 
+    s.querySelector(':scope > invoice')?.textContent === '0' &&
+    s.querySelector(':scope > pdf_delivery')?.textContent === '0'
+  )
+  
+  if (safeState) {
+    return safeState.querySelector(':scope > id')?.textContent
+  }
+  
+  // Fallback si aucun n'est trouvé
+  return states[0]?.querySelector(':scope > id')?.textContent
+}
+
+async function fetchCountryId(isoCode = 'FR') {
+  return fetchFirstResourceId('countries', 'country', `&filter[iso_code]=${isoCode}&display=[id]`)
+}
+
+async function fetchOrderStatesMap() {
+  const xmlText = await requestXml(buildUrl('order_states', '&display=full'))
+  const xml = parseXml(xmlText)
+  const map = {}
+  xml.querySelectorAll('order_state').forEach(state => {
+    const id = getText(state, ':scope > id')
+    if (!id) return
+    map[id] = {
+      label: getText(state, 'name language[id="1"]'),
+      color: getText(state, ':scope > color') || '#888',
+    }
+  })
+  return map
+}
+
+// French comments: Gère l'adresse : on prend les infos depuis addressForm passées
+export async function ensureAddress(customer, addressForm) {
+  const xmlText = await requestXml(
+    buildUrl('addresses', `&filter[id_customer]=${customer.id}&display=full`)
+  )
+  const xml = parseXml(xmlText)
+  const existingId = getFirstId(xml, 'address')
+  if (existingId) return existingId
+
+  // French comments: Sinon on crée l'adresse
+  const countryId = await fetchCountryId('FR')
+  const addressXml = `<?xml version="1.0" encoding="UTF-8"?>
+<prestashop>
+  <address>
+    <id_customer>${customer.id}</id_customer>
+    <id_country>${countryId}</id_country>
+    <alias>${escapeXml(addressForm?.alias || 'Saisie Adresse')}</alias>
+    <firstname>${escapeXml(addressForm?.firstname || customer.firstName)}</firstname>
+    <lastname>${escapeXml(addressForm?.lastname || customer.lastName)}</lastname>
+    <address1>${escapeXml(addressForm?.address1 || 'Adresse par défaut')}</address1>
+    <city>${escapeXml(addressForm?.city || 'France')}</city>
+    <postcode>${escapeXml(addressForm?.postcode || '00000')}</postcode>
+  </address>
+</prestashop>`
+
+  const createdText = await requestXml(buildUrl('addresses'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/xml' },
+    body: addressXml,
+  })
+  const createdXml = parseXml(createdText)
+  const createdId = getFirstId(createdXml, 'address')
+  if (!createdId) throw new Error('Adresse créée mais id introuvable')
+  return createdId
+}
+
+function toNumber(value) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+function calcTotals(cartItems) {
+  const totalProducts = cartItems.reduce((sum, item) => {
+    return sum + toNumber(item.price) * toNumber(item.quantity)
+  }, 0)
+
+  const totalProductsWt = cartItems.reduce((sum, item) => {
+    const priceTtc = item.priceTTC != null ? item.priceTTC : item.price
+    return sum + toNumber(priceTtc) * toNumber(item.quantity)
+  }, 0)
+
+  return {
+    totalProducts: totalProducts.toFixed(2),
+    totalProductsWt: totalProductsWt.toFixed(2),
+  }
+}
+
+function buildOrderRows(cartItems) {
+  return cartItems.map(item => `
+      <order_row>
+        <product_id>${item.id}</product_id>
+        <product_attribute_id>0</product_attribute_id>
+        <product_quantity>${item.quantity}</product_quantity>
+        <product_name>${escapeXml(item.name || '')}</product_name>
+        <product_reference>${escapeXml(item.reference || '')}</product_reference>
+        <product_price>${toNumber(item.price).toFixed(2)}</product_price>
+        <unit_price_tax_excl>${toNumber(item.price).toFixed(2)}</unit_price_tax_excl>
+        <unit_price_tax_incl>${toNumber(item.priceTTC ?? item.price).toFixed(2)}</unit_price_tax_incl>
+      </order_row>
+    `).join('')
+}
+
+export async function createOrder({ customer, cartId, addressId, cartItems, paymentModule }) {
+  if (!cartId) throw new Error("Aucun panier à convertir en commande !");
+
+  const orderStateId = await fetchOrderStateId()
+  const rows = buildOrderRows(cartItems)
+  const totals = calcTotals(cartItems)
+  const totalPaid = totals.totalProductsWt
+
+  const payload = {
+    customerId: customer.id,
+    cartId,
+    addressId,
+    carrierId: 0, // French comments: On fixe à 0 car aucun transporteur n'est géré/demandé
+    orderStateId,
+    currencyId: '1',
+    langId: '1',
+    module: paymentModule || 'ps_cashondelivery',
+    payment: 'Paiement',
+    totalProducts: totals.totalProducts,
+    totalProductsWt: totals.totalProductsWt,
+    totalPaid,
+    totalPaidTaxIncl: totalPaid,
+    totalPaidTaxExcl: totals.totalProducts,
+    orderRows: rows,
+  }
+
+  const orderXml = `<?xml version="1.0" encoding="UTF-8"?>
+<prestashop>
+  <order>
+    <id_customer>${payload.customerId}</id_customer>
+    <id_address_delivery>${payload.addressId}</id_address_delivery>
+    <id_address_invoice>${payload.addressId}</id_address_invoice>
+    <id_cart>${payload.cartId}</id_cart>
+    <id_currency>${payload.currencyId}</id_currency>
+    <id_lang>${payload.langId}</id_lang>
+    <id_carrier>${payload.carrierId}</id_carrier>
+    <current_state>${payload.orderStateId}</current_state>
+    <payment>${escapeXml(payload.payment)}</payment>
+    <module>${escapeXml(payload.module)}</module>
+    <total_paid>${payload.totalPaid}</total_paid>
+    <total_paid_tax_incl>${payload.totalPaidTaxIncl}</total_paid_tax_incl>
+    <total_paid_tax_excl>${payload.totalPaidTaxExcl}</total_paid_tax_excl>
+    <total_paid_real>${payload.totalPaid}</total_paid_real>
+    <total_products>${payload.totalProducts}</total_products>
+    <total_products_wt>${payload.totalProductsWt}</total_products_wt>
+    <total_shipping>0</total_shipping>
+    <total_shipping_tax_incl>0</total_shipping_tax_incl>
+    <total_shipping_tax_excl>0</total_shipping_tax_excl>
+    <conversion_rate>1</conversion_rate>
+    <valid>1</valid>
+    <associations>
+      <order_rows>
+        ${payload.orderRows}
+      </order_rows>
+    </associations>
+  </order>
+</prestashop>`
+
+  const res = await fetch(buildUrl('orders'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/xml' },
+    body: orderXml,
+  })
+  
+  const responseText = await res.text()
+  if (!res.ok) {
+    console.error('PrestaShop Order Error:', responseText)
+    throw new Error('Erreur création commande: ' + responseText)
+  }
+  
+  const responseXml = parseXml(responseText)
+  const orderId = getFirstId(responseXml, 'order')
+  
+  if (orderId) return { orderId, orderXml }
+  throw new Error('Erreur création commande: order id introuvable')
+}
+
+export async function getOrders(customerId) {
+  // French comments: Récupération des commandes d'un client spécifique
+  const ordersText = await requestXml(
+    buildUrl('orders', `&display=full&filter[id_customer]=${customerId}`)
+  )
+  const ordersXml = parseXml(ordersText)
+  const statesMap = await fetchOrderStatesMap()
+
+  const orders = Array.from(ordersXml.querySelectorAll('order')).map(order => {
+    return {
+      id: getText(order, ':scope > id'),
+      reference: getText(order, ':scope > reference'),
+      customerId: getText(order, ':scope > id_customer'),
+      payment: getText(order, ':scope > payment'),
+      state: statesMap[getText(order, ':scope > current_state')] || null,
+      totalPaid: Number(getText(order, ':scope > total_paid_tax_incl') || 0).toFixed(2),
+      dateAdd: getText(order, ':scope > date_add'),
+    }
+  })
+
+  // French comments: Récupération des détails (articles de la commande)
+  const detailsByOrder = {}
+  await Promise.all(
+    orders.map(async order => {
+      const detailsText = await requestXml(
+        buildUrl('order_details', `&display=full&filter[id_order]=${order.id}`)
+      )
+      const detailsXml = parseXml(detailsText)
+      detailsByOrder[order.id] = Array.from(detailsXml.querySelectorAll('order_detail')).map(d => ({
+        productName: getText(d, ':scope > product_name'),
+        quantity: Number(getText(d, ':scope > product_quantity') || 0),
+        price: Number(getText(d, ':scope > unit_price_tax_incl') || 0).toFixed(2),
+      }))
+    })
+  )
+
+  return orders.map(order => ({
+    ...order,
+    items: detailsByOrder[order.id] || [],
+  }))
+}
+
+export async function checkout({ customer, cartId, addressId, items, paymentModule }) {
+  // French comments: Exécution globale du paiement une fois address validée
+  const carrierId = await fetchCarrierId()
+
+  const order = await createOrder({
+    customer,
+    cartId,
+    addressId,
+    carrierId,
+    cartItems: items,
+    paymentModule
+  })
+
+  return { addressId, cartId, carrierId, ...order }

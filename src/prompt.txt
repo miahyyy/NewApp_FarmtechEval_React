@@ -1,0 +1,587 @@
+# CONTEXTE GLOBAL
+
+J’ai un projet NewAPP en React connecté à PrestaShop 8.x via l’API XML uniquement.
+
+Le sujet de mon examen est :
+
+* utiliser PrestaShop v8.2.6 en local
+* comprendre les modules ecommerce
+* produits
+* clients
+* commandes
+* etc.
+*  
+
+  ## **Jour 1**
+
+  **NewAPP**
+
+  1. **Backoffice ( avec login/mdp , mettre par defaut sur le formulaire )**
+
+     1. **il faut protéger les pages du back office**
+     2. **créer une page avec un bouton pour réinitialiser les données**
+     3. **créer la page pour importer les 4 fichiers **
+
+        1. **3 fichiers csv pour le contenu **[**import-data-mai-26**](https://docs.google.com/spreadsheets/d/1edpSD6drVAr886oYXbmUApC8QEAcsxtLgttcrUeK8oY/edit?usp=sharing)**	 **
+
+           1. **csv modifié ce 11/05 à 13:15 , voir couleur rouge**
+        2. **1 fichier zip pour les images :  **[**images.zip**](https://drive.google.com/file/d/1OAqmtaJZ3jlrOtFbR4hwt0tsfr0pTT1a/view?usp=sharing)** **
+     4. **page pour afficher les commandes et modifier l’état**
+
+        1. **echec paiement**
+        2. **paiement effectué**
+        3. **annulé**
+  2. **FrontOffice**
+
+     1. **créer la page d’accueil pour afficher les produits**
+
+        1. **avec fiche produit**
+     2. **faire marcher le workflow d’achat**
+
+        1. **gestion de panier**
+        2. **validation commande**
+
+           1. **avec uniquement le choix “paiement à la livraison”**
+           2. **pas de frais de livraison**
+     3. **état de “mes commandes”**
+        **ExistingApp**
+  3. **s’assurer que **
+
+     1. **Toutes les données importées sont visibles quelque part dans le backoffice de prestashop.**
+     2. **Que la modification des données aient un impact sur la NewAPP**
+        \
+
+  Note ce 12/05 : utiliser France comme Pays, et Euro comme devise
+
+  \
+
+  Note : Créer uniquement les pages demandées, pas de menu ni affichage non demandé
+
+
+    
+
+Le NewAPP React doit être lié au vrai projet Prestashop existant.
+
+IMPORTANT :
+Je veux maintenant REFAIRE COMPLÈTEMENT tout le workflow qui concerne la  commande de mon NewAPP React afin qu’il reproduise le plus fidèlement possible le vrai fonctionnement interne de PrestaShop 8.x car le mien de maintenant est très defféctué et presente plusieurs bug que ce soit au niveau du front qu au niveau du back 
+
+Le but est que :
+
+* les paniers,
+* commandes,
+* états,
+* historiques,
+* adresses,
+* paiements,
+* order details,
+* persistance client,
+* sessions panier,
+  fonctionnent comme dans le vrai frontoffice Prestashop.
+
+Je veux que le raisonnement du code soit inspiré du vrai code source Prestashop :
+
+* Cart
+* Order
+* OrderHistory
+* PaymentModule::validateOrder()
+* Checkout process
+* Customer session
+* Cart persistence
+
+SANS modifier le code source Prestashop.
+
+❌ INTERDICTION TOTALE DE MODIFIER PRESTASHOP LUI MEME 
+
+NE JAMAIS :
+
+* modifier le core Prestashop
+* modifier les controllers Prestashop
+* modifier PaymentModule
+* modifier OrderHistory
+* modifier Cart
+* modifier le frontoffice Prestashop
+* modifier le backoffice Prestashop
+* modifier les modules Prestashop
+* modifier la base manuellement
+* ajouter des hacks dans Prestashop
+
+TOUT doit être fait uniquement dans mon NewAPP React.
+
+Supprimer totalement toute ancienne logique liée à :
+
+* panier
+* checkout
+* commandes
+* order states
+* adresses
+* localStorage panier
+* persistance panier locale
+* faux workflow checkout
+* anciens services commandes
+* anciens contexts panier
+* anciens états fake
+* logique non alignée avec Prestashop
+-> si la logique n est pas le meme que le vrai prestashop lui meme
+
+
+Je veux repartir sur une architecture propre.
+
+❌ Aucun hardcode , car tout doit etre appeller dynamiquement 
+❌ Aucun JSON API
+❌ Aucun fetch JSON
+❌ XML uniquement
+❌ Aucun faux panier local
+❌ Aucun état de commande simulé
+❌ Aucun ID codé en dur
+❌ Aucun module paiement hardcodé
+❌ Aucun order_state hardcodé
+❌ Aucun customer hardcodé
+
+⚠️ NE PAS TOUCHER AU CSS
+⚠️ NE PAS MODIFIER LE DESIGN
+⚠️ NE PAS CHANGER MES CLASSES CSS
+⚠️ NE PAS REFAIRE L’UI
+⚠️ NE PAS MODIFIER LES STYLES
+
+Modifier UNIQUEMENT dans mon new app  :
+
+* logique métier de tout ce qui concerne la commande (son workflow)
+* services API XML
+* workflow checkout
+* contexts React
+* logique panier
+* logique commandes
+* logique adresses
+* logique order states
+* logique order history
+* logique paiement
+* synchronisation Prestashop
+
+Le système doit respecter le vrai raisonnement Prestashop :
+
+Cart ≠ Order
+
+Workflow réel :
+
+Cart
+→ Address
+→ Carrier
+→ Payment
+→ validateOrder()
+→ Order
+→ OrderHistory
+
+Respecter :
+
+* ps_cart
+* ps_cart_product
+* ps_orders
+* ps_order_detail
+* ps_order_history
+* ps_order_state
+
+IMPORTANT :
+Le changement d’état doit se faire UNIQUEMENT via :
+OrderHistory
+
+NE PLUS modifier current_state directement.
+
+Utiliser UNIQUEMENT :
+API XML Prestashop
+
+Toujours :
+
+* vérifier les schémas XML avec ?schema=blank
+* faire des PUT XML complets
+* respecter les structures XML Prestashop
+* utiliser les vraies relations Prestashop
+
+AUCUN JSON.
+
+Je veux que mon NewAPP React fonctionne comme le vrai Prestashop concernant :
+
+* panier client
+* persistance panier
+* checkout
+* commandes
+* order details
+* états commande
+* order history
+* adresses
+* paiement
+* workflow validateOrder
+* synchronisation DB
+
+Les données doivent être visibles :
+
+* dans mon NewAPP
+* ET dans le vrai backoffice Prestashop
+* ET dans le vrai frontoffice Prestashop
+
+/
+HomePage
+
+/product/
+ProductPage
+
+/cart
+CartPage
+
+/checkout/address
+CheckoutAddressPage
+
+/checkout/payment
+CheckoutPaymentPage
+
+/my-orders
+MyOrdersPage
+
+================================================================================
+
+1. HOMEPAGE
+   ================================================================================
+
+Afficher dynamiquement :
+
+* produits
+* image
+* prix
+* stock
+* bouton voir produit
+
+API XML uniquement.
+
+Afficher :
+
+* image
+* description
+* prix
+* stock
+* quantité
+* bouton ajouter au panier
+
+IMPORTANT :
+PAS DE PANIER ANONYME.
+
+Si utilisateur non connecté :
+→ redirection login
+
+Quand utilisateur clique sur “Ajouter au panier” :
+
+ÉTAPE 1 :
+Chercher un panier existant du client :
+
+GET /api/carts?filter[id_customer]=XXX&sort=[id_DESC]&limit=1
+
+IMPORTANT :
+Le panier doit être :
+
+* réel
+* persistant
+* lié au client
+* enregistré dans Prestashop 
+c est a dire que quand je vais ajouter un panier dans mon newapp, le panier doit etre directement inserée dans la base toujours via les api et donc je dois voir le panier dans le frontoffice du vrai prestashop dans le compte du client 
+
+Chaque client doit avoir SON PROPRE panier Prestashop.
+
+PLUS AUCUN :
+
+* localStorage global
+* panier partagé
+* faux state React uniquement
+
+SI panier existe :
+→ PUT /api/carts/{id_cart}
+
+SINON :
+→ POST /api/carts
+
+Les lignes produits doivent être synchronisées avec :
+
+* ps_cart
+* ps_cart_product
+
+Je veux le vrai comportement Prestashop :
+
+EXEMPLE :
+
+Client X :
+
+* se connecte
+* crée panier
+* valide commande
+
+ENSUITE :
+
+* il doit pouvoir recréer un NOUVEAU panier
+* refaire une autre commande
+* recommencer autant de fois qu’il veut
+
+IMPORTANT :
+Une commande validée ne doit plus être réutilisée comme panier actif.
+
+Il faut gérer correctement :
+
+* session client
+* récupération du dernier panier actif
+* création nouveau panier après validation
+* logique utilisée dans Prestashop
+* des que je crée un panier dans react newapp il doit etre visible dans le frontoffice prestashop dans le compte du client 
+
+Inspirer le comportement des classes :
+
+* Cart
+* Context
+* Cookie
+* Customer session
+
+Afficher :
+
+* produits
+* quantités
+* total
+* suppression
+* modification quantité
+* bouton valider commande
+
+Chaque modification :
+→ PUT XML réel sur le panier Prestashop
+
+Quand utilisateur clique :
+“Valider commande”
+
+Vérifier :
+
+GET /api/addresses?filter[id_customer]=XXX
+
+SI aucune adresse :
+→ redirection vers :
+/checkout/address
+
+Je ne veux PLUS :
+
+* création automatique adresse fake
+* adresse hardcodée
+* logique cachée
+
+Je veux un vrai formulaire obligatoire.
+
+CHAMP UNIQUE :
+
+* adresse
+
+PAS :
+
+* prénom
+* nom
+* ville
+* pays
+* code postal
+
+Les autres données doivent être :
+
+* récupérées automatiquement depuis le client connecté
+* ou remplies proprement selon le fonctionnement Prestashop
+
+Quand utilisateur valide :
+→ POST /api/addresses
+
+Créer une vraie adresse Prestashop liée au client.
+
+ENSUITE :
+→ PUT /api/carts/{id_cart}
+
+Renseigner :
+
+* id_address_delivery
+* id_address_invoice
+
+IMPORTANT :
+Une fois l’adresse créée :
+
+* elle reste enregistrée dans Prestashop
+* le client ne doit plus revoir ce formulaire aux prochaines commandes
+
+Afficher :
+
+* résumé panier
+* adresse livraison
+* total
+* livraison gratuite 
+* select paiement dynamique
+
+AUCUN HARDCODE.
+
+Les paiements doivent venir dynamiquement des modules Prestashop actifs.
+
+EXEMPLES :
+
+* ps_cashondelivery
+* ps_wirepayment
+* ps_checkpayment
+
+MAIS :
+Pour le Jour 1 :
+afficher UNIQUEMENT :
+
+* paiement à la livraison (cash on delivery)
+
+IMPORTANT :
+Même si un seul mode est affiché :
+
+* récupération dynamique obligatoire
+* architecture extensible obligatoire
+
+Quand utilisateur clique :
+“Confirmer commande”
+
+Créer via API XML :
+
+* vraie commande Prestashop
+* vrais order details
+* liaison panier
+* paiement
+* transporteur
+* total
+* order history
+* état commande
+
+IMPORTANT :
+Le raisonnement doit s’inspirer de :
+PaymentModule::validateOrder()
+
+Afficher commandes du client :
+
+GET /api/orders?filter[id_customer]=XXX&display=full
+
+Afficher :
+
+* référence
+* date
+* total
+* statut
+* produits
+
+Les états doivent venir dynamiquement :
+
+GET /api/order_states
+
+PAGES :
+
+/backoffice/login
+/backoffice/orders
+/backoffice/orders/
+
+Afficher :
+
+* commandes
+* client
+* total
+* paiement
+* état
+* date
+
+API :
+GET /api/orders?display=full
+
+IMPORTANT :
+NE PLUS modifier current_state directement.
+
+Le changement état doit suivre le vrai fonctionnement Prestashop :
+
+→ POST /api/order_histories
+
+XML :
+
+Récupération dynamique obligatoire via :
+
+GET /api/order_states
+
+Mais afficher uniquement :
+
+* Paiement effectué (payement accepted)
+* Échec paiement (error payement)
+* Annulé (canceled)
+
+IMPORTANT :
+Pas de hardcode IDs.
+
+Ne PAS afficher :
+
+* Remote payment accepted
+* Paiement à distance accepté
+
+Je veux aussi un export PDF dans le backoffice React.
+
+Comme dans le vrai backoffice Prestashop.
+
+Le PDF doit contenir :
+
+* informations commande
+* client
+* produits
+* total
+* statut
+* date
+* adresse livraison
+
+IMPORTANT :
+
+* ne pas modifier Prestashop
+* faire le PDF uniquement côté NewAPP via les api et les endpoints 
+
+Je veux :
+
+* architecture simple
+* code propre
+* code lisible
+* pas de code compliqué inutile
+
+IMPORTANT :
+Ajouter énormément de commentaires EN FRANÇAIS dans le code pour expliquer :
+
+* ce que fait chaque fonction
+* pourquoi elle existe
+* le workflow Prestashop
+
+Quand tu modifies le projet :
+
+* modifier directement les fichiers concernés
+* ne pas me donner de commandes terminal inutiles
+* ne pas me demander de faire les modifications manuellement
+* faire les vraies corrections directement sans commettre de faute 
+
+Avant de coder :
+
+Analyser le vrai fonctionnement Prestashop :
+
+* Cart
+* Order
+* OrderHistory
+* PaymentModule
+* validateOrder()
+* checkout
+* customer session
+* cart persistence
+* address workflow
+* payment modules
+
+Étudier :
+
+* classes
+* controllers
+* logique interne Prestashop
+
+Puis refaire mon workflow React en conséquence.
+
+Je veux que mon NewAPP React soit :
+
+* propre
+* stable
+* extensible
+* aligné avec Prestashop
+* sans hardcode , toujours recuperer via xml api ou endpoints 
+* totalement synchronisé avec Prestashop
+sans aucun erreur de logique , de gestion , ou autres 
+
+Je veux un vrai workflow ecommerce Prestashop-like.
