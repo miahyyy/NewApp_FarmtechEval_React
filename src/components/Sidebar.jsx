@@ -7,12 +7,13 @@ const LINKS = [
   { to: '/checkout/payment', label: 'Paiement', icon: '💳' },
   { to: '/my-orders', label: 'Mes commandes', icon: '📦' },
   { to: '/login', label: 'Connexion', icon: '🔐' },
+  { to: '/admin/login', label: 'Backoffice', icon: '🔐' },
 ]
 
 function Sidebar() {
   return (
     <aside className="sidebar">
-      <div className="sidebar-logo">NewAPP</div>
+      <div className="sidebar-logo">Farmtech</div>
       <nav>
         <ul>
           {LINKS.map((link) => (
